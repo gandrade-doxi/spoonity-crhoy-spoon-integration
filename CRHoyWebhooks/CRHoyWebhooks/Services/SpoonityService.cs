@@ -4,8 +4,12 @@ using System.Net.Http.Json;
 
 public interface ISpoonityService
 {
+
     Task<bool> UserExistsByEmailAsync(string email);
     Task<SubscribedUser?> GetUserInfoByEmailAsync(string email);
+    Task<string?> GetSessionKeyByEmailAsync(string email);
+    Task<bool> AwardPromotionTokensAsync(string sessionKey, IEnumerable<string> tokens);
+
 }
 
 public class SpoonityService : ISpoonityService
@@ -72,6 +76,32 @@ public class SpoonityService : ISpoonityService
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+    }
+
+    public async Task<string?> GetSessionKeyByEmailAsync(string email)
+    {
+        var body = new { card_number = email };
+        var url = $"{_settings.Endpoint}/onscreen?api_key={_settings.ApiKey}";
+
+        var response = await _httpClient.PostAsJsonAsync(url, body);
+        if (!response.IsSuccessStatusCode) return null;
+
+        var content = await response.Content.ReadFromJsonAsync<OnscreenSessionResponse>();
+        return content?.pos_session?.hash;
+    }
+
+    public async Task<bool> AwardPromotionTokensAsync(string sessionKey, IEnumerable<string> tokens)
+    {
+        foreach (var token in tokens)
+        {
+            var awardUrl = $"{_settings.Endpoint}/vendor/promotion/award.json?session_key={sessionKey}";
+            var response = await _httpClient.PostAsJsonAsync(awardUrl, new { code = token });
+
+            if (!response.IsSuccessStatusCode)
+                return false;
+        }
+
+        return true;
     }
 }
 

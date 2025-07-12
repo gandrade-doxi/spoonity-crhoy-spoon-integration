@@ -2,15 +2,16 @@
 {
     public class WebhookEvent
     {
-        public string EventType { get; set; }
-        public DateTime Timestamp { get; set; }
-        public WebhookData Data { get; set; }
+        public string WebhookId { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? CurrentPeriodEnd { get; set; }
+        public WebhookUser User { get; set; } = new();
     }
 
-    public class WebhookData
+    public class WebhookUser
     {
-        public bool TestEvent { get; set; }
-        public string WebhookId { get; set; }
-        public string Message { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string DocumentId { get; set; } = string.Empty;
     }
 }
