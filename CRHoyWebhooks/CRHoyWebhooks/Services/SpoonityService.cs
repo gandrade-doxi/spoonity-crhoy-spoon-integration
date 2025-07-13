@@ -94,7 +94,7 @@ public class SpoonityService : ISpoonityService
     {
         foreach (var token in tokens)
         {
-            var awardUrl = $"{_settings.Endpoint}/vendor/promotion/award.json?session_key={sessionKey}";
+            var awardUrl = $"https://api.spoonity.com/vendor/promotion/award.json?session_key={sessionKey}";
             var response = await _httpClient.PostAsJsonAsync(awardUrl, new { code = token });
 
             if (!response.IsSuccessStatusCode)

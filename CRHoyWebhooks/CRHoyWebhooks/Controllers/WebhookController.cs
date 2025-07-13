@@ -1,19 +1,25 @@
 using CRHoyWebhooks.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using CRHoyWebhooks.Services;
+using CRHoyWebhooks.Models;
+using CRHoyWebhooks.Data;
 
 [ApiController]
 [Route("api/webhook")]
 public class WebhookController : ControllerBase
 {
     private readonly ISpoonityService _spoonityService;
+    private readonly IEmailService _emailService;
     private readonly AppDbContext _dbContext;
 
     public WebhookController(
         ISpoonityService spoonityService,
+        IEmailService emailService,
         AppDbContext dbContext)
     {
         _spoonityService = spoonityService;
+        _emailService = emailService;
         _dbContext = dbContext;
     }
 
@@ -24,40 +30,30 @@ public class WebhookController : ControllerBase
         if (string.IsNullOrWhiteSpace(email))
             return BadRequest(new { message = "Email is required" });
 
-        var userExists = await _spoonityService.UserExistsByEmailAsync(email);
-        if (!userExists)
-            return NotFound(new { message = "User not found in Spoonity" });
+        var existsInSpoonity = await _spoonityService.UserExistsByEmailAsync(email);
 
-        var userInfo = await _spoonityService.GetUserInfoByEmailAsync(email);
-        if (userInfo == null)
-            return NotFound(new { message = "Failed to fetch user details" });
+        var replacements = new Dictionary<string, string>
+            {
+                { "{{EMAIL}}", email },
+                {
+                    "{{BODY}}",
+                    existsInSpoonity
+                        ? "<p>¡Gracias por suscribirte! Ya formas parte del programa de beneficios de CRHoy.</p>"
+                        : "<p>Gracias por suscribirte. Recuerda que debes registrarte en el programa de fidelidad en tu próxima visita.</p>"
+                }
+            };
 
-        var existing = await _dbContext.SubscribedUsers.FirstOrDefaultAsync(u => u.Email == email);
-        if (existing == null)
-        {
-            userInfo.SubscriptionDate = DateTime.UtcNow;
-            userInfo.IsActive = true;
-            userInfo.LastEventType = "SUBSCRIPTION_CREATED";
-            userInfo.Cedula ??= webhook.User?.DocumentId;
-            _dbContext.SubscribedUsers.Add(userInfo);
-        }
-        else
-        {
-            existing.FirstName = userInfo.FirstName;
-            existing.LastName = userInfo.LastName;
-            existing.Cedula = webhook.User?.DocumentId ?? existing.Cedula;
-            existing.PassportNumber = userInfo.PassportNumber;
-            existing.PhoneNumber = userInfo.PhoneNumber;
-            existing.Address = userInfo.Address;
-            existing.CloverId = userInfo.CloverId;
-            existing.SubscriptionDate = DateTime.UtcNow;
-            existing.IsActive = true;
-            existing.LastEventType = "SUBSCRIPTION_CREATED";
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
+        var sent = await _emailService.SendTemplatedEmailAsync(
+            email,
+            "¡Bienvenido a CRHoy Loyalty!",
+            "SubscriptionCreatedEmail.html",
+            replacements
+        );
 
-        await _dbContext.SaveChangesAsync();
-        return Ok(new { message = "User subscribed and saved" });
+        if (!sent)
+            return StatusCode(500, new { message = "No se pudo enviar el correo" });
+
+        return Ok(new { message = "Correo enviado correctamente" });
     }
 
     [HttpPost("subscription-expired")]

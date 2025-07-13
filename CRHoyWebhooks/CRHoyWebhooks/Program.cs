@@ -1,5 +1,7 @@
+using CRHoyWebhooks.Data;
 using CRHoyWebhooks.Models;
 using CRHoyWebhooks.Services;
+using CRHoyWebhooks.Services.CRHoyWebhooks.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +20,8 @@ builder.Services.Configure<SpoonitySettings>(
     builder.Configuration.GetSection("Spoonity"));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ISpoonityService, SpoonityService>();
+builder.Services.Configure<SendGridSettings>(builder.Configuration.GetSection("SendGrid"));
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.Configure<CrHoySettings>(builder.Configuration.GetSection("CrHoy"));
 builder.Services.AddScoped<ICrHoyService, CrHoyService>();

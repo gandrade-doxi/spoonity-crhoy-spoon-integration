@@ -5,6 +5,7 @@
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
     using CRHoyWebhooks.Services;
+    using CRHoyWebhooks.Data;
 
     [ApiController]
     [Route("api/crhoy")]
@@ -24,25 +25,32 @@
             _dbContext = dbContext;
         }
 
-        [HttpGet("check-user")]
-        public async Task<IActionResult> CheckCrHoyUser([FromQuery] string email)
+        [HttpPost("check-user")]
+        public async Task<IActionResult> CheckCrHoyUser([FromBody] CheckUserRequest request)
         {
-            if (string.IsNullOrWhiteSpace(email))
-                return BadRequest(new { message = "Email is required" });
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.SessionKey))
+                return BadRequest(new { message = "Email y sessionKey son requeridos" });
 
-            var crHoyResult = await _crHoyService.VerifyUserAsync(email);
+            var crHoyResult = await _crHoyService.VerifyUserAsync(request.Email);
             if (crHoyResult == null || !crHoyResult.isVerified)
-                return NotFound(new { message = "Por favor regístrate en CRHoy" });
+            {
+                return StatusCode(403, new
+                {
+                    error = "NOT_CRHOY_USER",
+                    message = "El usuario no pertenece a CRHoy. Te invitamos a registrarte para acceder a los beneficios."
+                });
+            }
 
-            var existing = await _dbContext.SubscribedUsers.FirstOrDefaultAsync(u => u.Email == email);
+            var existing = await _dbContext.SubscribedUsers.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (existing == null)
             {
                 var newUser = new SubscribedUser
                 {
-                    Email = email,
+                    Email = request.Email,
                     FirstName = crHoyResult.userData?.firstName,
                     LastName = crHoyResult.userData?.lastName,
                     Cedula = crHoyResult.userData?.documentNumber,
+                    SessionKey = request.SessionKey,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                     IsActive = true,
@@ -59,11 +67,6 @@
 
             await _dbContext.SaveChangesAsync();
 
-            // Obtener session_key desde Spoonity
-            var sessionKey = await _spoonityService.GetSessionKeyByEmailAsync(email);
-            if (string.IsNullOrEmpty(sessionKey))
-                return StatusCode(500, new { message = "Error al obtener session_key de Spoonity" });
-
             var tokens = new[]
             {
         "132e92eca88c644426c2c456207bcbe5", // Capuccino 2x1
@@ -72,7 +75,7 @@
         "c63b1d449ecd3acf28f1c8a7ad105dab"  // Chilenas 15%
     };
 
-            var awarded = await _spoonityService.AwardPromotionTokensAsync(sessionKey, tokens);
+            var awarded = await _spoonityService.AwardPromotionTokensAsync(request.SessionKey, tokens);
             if (!awarded)
                 return StatusCode(500, new { message = "Error al asignar los premios" });
 
@@ -82,6 +85,7 @@
                 user = crHoyResult.userData
             });
         }
+
 
     }
 }
