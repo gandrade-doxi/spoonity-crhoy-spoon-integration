@@ -51,21 +51,22 @@ public class Worker : BackgroundService
                 {
                     _logger.LogInformation("🎯 Procesando usuario: {Email}", user.Email);
 
-                    foreach (var token in tokens)
-                    {
-                        var success = await spoonityService.AwardPromotionTokensAsync(user.SessionKey!, new[] { token });
+                    var results = await spoonityService.AwardPromotionTokensDetailedAsync(user.SessionKey!, tokens);
 
+                    foreach (var result in results)
+                    {
                         db.RewardLogs.Add(new RewardLog
                         {
                             Email = user.Email,
                             SessionKey = user.SessionKey,
-                            Token = token,
+                            Token = result.Token,
                             Timestamp = now,
-                            Success = success,
-                            ResponseMessage = success ? "OK" : "Error al enviar token"
+                            Success = result.Success,
+                            ResponseMessage = result.ResponseMessage,
+                            Source = "WORKER"
                         });
 
-                        _logger.LogInformation("🎁 Token {Token} enviado a {Email} - Éxito: {Success}", token, user.Email, success);
+                        _logger.LogInformation("🎁 Token {Token} enviado a {Email} - Éxito: {Success}", result.Token, user.Email, result.Success);
                     }
 
                     user.LastRewardedAt = now;
@@ -79,7 +80,6 @@ public class Worker : BackgroundService
                 _logger.LogError(ex, "❌ Error durante el proceso de premiación");
             }
 
-            // Esperar 24 horas
             await Task.Delay(TimeSpan.FromDays(1), stoppingToken);
         }
     }

@@ -5,48 +5,37 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using CRHoyWebhooks.Services;
 using CRHoyWebhooks.Data;
+using CRHoyWebhooks.Models;
+using Microsoft.Extensions.Configuration;
 
-try
-{
-    Host.CreateDefaultBuilder(args)
-        .UseWindowsService()
-        .ConfigureAppConfiguration((hostingContext, config) =>
-        {
-            // Asegura que appsettings.json se cargue correctamente
-            config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-        })
-        .UseSerilog((context, services, config) =>
-        {
-            config.Enrich.FromLogContext()
-                  .WriteTo.File(
-                      path: "Logs/rewards.log",
-                      rollingInterval: RollingInterval.Day,
-                      retainedFileCountLimit: 7,
-                      outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
-        })
-        .ConfigureServices((hostContext, services) =>
-        {
-            var configuration = hostContext.Configuration
-                ?? throw new InvalidOperationException("No se pudo cargar la configuración del Host");
+Host.CreateDefaultBuilder(args)
+    .UseWindowsService()
+    .UseSerilog((context, services, config) =>
+    {
+        config.Enrich.FromLogContext()
+              .WriteTo.File(
+                  path: "Logs/rewards.log",
+                  rollingInterval: RollingInterval.Day,
+                  retainedFileCountLimit: 7,
+                  outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+    })
+    .ConfigureServices((hostContext, services) =>
+    {
+        var configuration = hostContext.Configuration;
 
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        // Bind appsettings sections
+        services.Configure<SpoonitySettings>(configuration.GetSection("Spoonity"));
 
-            services.AddScoped<ISpoonityService, SpoonityService>();
-            services.AddHttpClient();
+        // Database
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
 
-            services.AddHostedService<Worker>();
-        })
-        .Build()
-        .Run();
-}
-catch (Exception ex)
-{
-    Console.WriteLine("❌ Error fatal al iniciar el Worker:");
-    Console.WriteLine(ex.ToString());
-    Log.Fatal(ex, "Error fatal al iniciar el Worker");
-}
-finally
-{
-    Log.CloseAndFlush();
-}
+        // Services
+        services.AddScoped<ISpoonityService, SpoonityService>();
+        services.AddHttpClient();
+
+        // Worker
+        services.AddHostedService<Worker>();
+    })
+    .Build()
+    .Run();

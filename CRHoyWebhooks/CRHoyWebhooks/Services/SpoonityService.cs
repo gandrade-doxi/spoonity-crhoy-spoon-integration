@@ -8,7 +8,7 @@ public interface ISpoonityService
     Task<bool> UserExistsByEmailAsync(string email);
     Task<SubscribedUser?> GetUserInfoByEmailAsync(string email);
     Task<string?> GetSessionKeyByEmailAsync(string email);
-    Task<bool> AwardPromotionTokensAsync(string sessionKey, IEnumerable<string> tokens);
+    Task<List<(string Token, bool Success, string? ResponseMessage)>> AwardPromotionTokensDetailedAsync(string sessionKey, IEnumerable<string> tokens);
 
 }
 
@@ -90,18 +90,20 @@ public class SpoonityService : ISpoonityService
         return content?.pos_session?.hash;
     }
 
-    public async Task<bool> AwardPromotionTokensAsync(string sessionKey, IEnumerable<string> tokens)
+    public async Task<List<(string Token, bool Success, string? ResponseMessage)>> AwardPromotionTokensDetailedAsync(string sessionKey, IEnumerable<string> tokens)
     {
+        var results = new List<(string, bool, string?)>();
+
         foreach (var token in tokens)
         {
-            var awardUrl = $"https://api.spoonity.com/vendor/promotion/award.json?session_key={sessionKey}";
+            var awardUrl = $"{_settings.Endpoint}/vendor/promotion/award.json?session_key={sessionKey}";
             var response = await _httpClient.PostAsJsonAsync(awardUrl, new { code = token });
 
-            if (!response.IsSuccessStatusCode)
-                return false;
+            var message = await response.Content.ReadAsStringAsync();
+            results.Add((token, response.IsSuccessStatusCode, message));
         }
 
-        return true;
+        return results;
     }
 }
 

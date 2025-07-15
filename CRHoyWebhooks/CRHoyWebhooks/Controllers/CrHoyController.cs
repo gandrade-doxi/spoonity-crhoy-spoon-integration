@@ -4,7 +4,6 @@
     using CRHoyWebhooks.Services;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
-    using CRHoyWebhooks.Services;
     using CRHoyWebhooks.Data;
 
     [ApiController]
@@ -42,9 +41,27 @@
             }
 
             var existing = await _dbContext.SubscribedUsers.FirstOrDefaultAsync(u => u.Email == request.Email);
-            if (existing == null)
+
+            if (existing != null)
             {
-                var newUser = new SubscribedUser
+                var alreadyAwarded = await _dbContext.RewardLogs.AnyAsync(r => r.Email == request.Email && r.Source == "WEB");
+                if (alreadyAwarded)
+                {
+                    return Conflict(new
+                    {
+                        error = "ALREADY_REWARDED",
+                        message = "Ya reclamaste tus premios. Los próximos se harán de forma automática cada mes."
+                    });
+                }
+
+                existing.IsActive = true;
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.LastEventType = "CRHOY_VERIFIED";
+                existing.SessionKey = request.SessionKey;
+            }
+            else
+            {
+                existing = new SubscribedUser
                 {
                     Email = request.Email,
                     FirstName = crHoyResult.userData?.firstName,
@@ -56,28 +73,40 @@
                     IsActive = true,
                     LastEventType = "CRHOY_VERIFIED"
                 };
-                _dbContext.SubscribedUsers.Add(newUser);
-            }
-            else
-            {
-                existing.IsActive = true;
-                existing.UpdatedAt = DateTime.UtcNow;
-                existing.LastEventType = "CRHOY_VERIFIED";
+                _dbContext.SubscribedUsers.Add(existing);
             }
 
             await _dbContext.SaveChangesAsync();
 
             var tokens = new[]
             {
-        "132e92eca88c644426c2c456207bcbe5", // Capuccino 2x1
-        "edc99da65ebf9149c2e011b769ea5ebb", // Lasagna 20%
-        "d89a6b18390605bd24a6e3a146709d4c", // Postres 20%
-        "c63b1d449ecd3acf28f1c8a7ad105dab"  // Chilenas 15%
-    };
+                "132e92eca88c644426c2c456207bcbe5",
+                "edc99da65ebf9149c2e011b769ea5ebb",
+                "d89a6b18390605bd24a6e3a146709d4c",
+                "c63b1d449ecd3acf28f1c8a7ad105dab"
+            };
 
-            var awarded = await _spoonityService.AwardPromotionTokensAsync(request.SessionKey, tokens);
-            if (!awarded)
-                return StatusCode(500, new { message = "Error al asignar los premios" });
+            var results = await _spoonityService.AwardPromotionTokensDetailedAsync(request.SessionKey, tokens);
+
+            if (results.Any(r => !r.Success))
+                return StatusCode(500, new { message = "Error al asignar uno o más premios" });
+
+            foreach (var result in results)
+            {
+                _dbContext.RewardLogs.Add(new RewardLog
+                {
+                    Email = request.Email,
+                    SessionKey = request.SessionKey,
+                    Token = result.Token,
+                    Success = result.Success,
+                    Source = "WEB",
+                    ResponseMessage = result.ResponseMessage,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+
+            await _dbContext.SaveChangesAsync();
 
             return Ok(new
             {
@@ -85,7 +114,5 @@
                 user = crHoyResult.userData
             });
         }
-
-
     }
 }
