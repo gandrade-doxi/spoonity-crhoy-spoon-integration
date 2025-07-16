@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <Content Remove="wwwroot\Templates\PromptRegisterSpoonity.html" />
-    <Content Remove="wwwroot\Templates\SubscriptionCreatedEmail.html" />
     <Content Remove="wwwroot\Templates\WelcomeSpoonityUser.html" />
   </ItemGroup>
 
@@ -33,7 +32,6 @@
     <None Include="wwwroot\Templates\PromptRegisterSpoonity.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="wwwroot\Templates\SubscriptionCreatedEmail.html" />
     <None Include="wwwroot\Templates\WelcomeSpoonityUser.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
