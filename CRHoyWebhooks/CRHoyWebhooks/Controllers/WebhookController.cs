@@ -1,8 +1,7 @@
-using CRHoyWebhooks.Models;
+﻿using CRHoyWebhooks.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CRHoyWebhooks.Services;
-using CRHoyWebhooks.Models;
 using CRHoyWebhooks.Data;
 
 [ApiController]
@@ -12,43 +11,47 @@ public class WebhookController : ControllerBase
     private readonly ISpoonityService _spoonityService;
     private readonly IEmailService _emailService;
     private readonly AppDbContext _dbContext;
+    private readonly IWebHostEnvironment _env;
 
     public WebhookController(
         ISpoonityService spoonityService,
         IEmailService emailService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IWebHostEnvironment env)
     {
         _spoonityService = spoonityService;
         _emailService = emailService;
         _dbContext = dbContext;
+        _env = env;
     }
 
     [HttpPost("subscription-created")]
     public async Task<IActionResult> HandleSubscriptionCreated([FromBody] WebhookEvent webhook)
     {
         var email = webhook.User?.Email;
+        var name = webhook.User?.Email ?? "Usuario";
+
         if (string.IsNullOrWhiteSpace(email))
             return BadRequest(new { message = "Email is required" });
 
         var existsInSpoonity = await _spoonityService.UserExistsByEmailAsync(email);
 
-        var replacements = new Dictionary<string, string>
-            {
-                { "{{EMAIL}}", email },
-                {
-                    "{{BODY}}",
-                    existsInSpoonity
-                        ? "<p>�Gracias por suscribirte! Ya formas parte del programa de beneficios de CRHoy.</p>"
-                        : "<p>Gracias por suscribirte. Recuerda que debes registrarte en el programa de fidelidad en tu pr�xima visita.</p>"
-                }
-            };
+        string templateFile = existsInSpoonity
+            ? "Templates/WelcomeSpoonityUser.html"
+            : "Templates/PromptRegisterSpoonity.html";
 
-        var sent = await _emailService.SendTemplatedEmailAsync(
-            email,
-            "�Bienvenido a CRHoy Loyalty!",
-            "SubscriptionCreatedEmail.html",
-            replacements
-        );
+        string subject = existsInSpoonity
+            ? "🎉 ¡Bienvenido a CRHoy PRO + Spooners! Ya podés disfrutar tus beneficios"
+            : "🚀 Activá tus beneficios CRHoy PRO en Spooners";
+
+        string htmlPath = Path.Combine(_env.ContentRootPath, templateFile);
+        if (!System.IO.File.Exists(htmlPath))
+            return StatusCode(500, new { message = "Template no encontrado" });
+
+        string htmlBody = await System.IO.File.ReadAllTextAsync(htmlPath);
+        htmlBody = htmlBody.Replace("[Nombre]", name);
+
+        var sent = await _emailService.SendEmailAsync(email, subject, htmlBody);
 
         if (!sent)
             return StatusCode(500, new { message = "No se pudo enviar el correo" });
