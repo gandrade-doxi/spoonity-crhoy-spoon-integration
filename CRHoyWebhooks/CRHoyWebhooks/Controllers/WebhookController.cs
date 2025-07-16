@@ -12,17 +12,20 @@ public class WebhookController : ControllerBase
     private readonly IEmailService _emailService;
     private readonly AppDbContext _dbContext;
     private readonly IWebHostEnvironment _env;
+    private readonly ILogger<WebhookController> _logger;
 
     public WebhookController(
         ISpoonityService spoonityService,
         IEmailService emailService,
         AppDbContext dbContext,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        ILogger<WebhookController> logger)
     {
         _spoonityService = spoonityService;
         _emailService = emailService;
         _dbContext = dbContext;
         _env = env;
+        _logger = logger;
     }
 
     [HttpPost("subscription-created")]
@@ -37,16 +40,20 @@ public class WebhookController : ControllerBase
         var existsInSpoonity = await _spoonityService.UserExistsByEmailAsync(email);
 
         string templateFile = existsInSpoonity
-            ? "Templates/WelcomeSpoonityUser.html"
-            : "Templates/PromptRegisterSpoonity.html";
+            ? "WelcomeSpoonityUser.html"
+            : "PromptRegisterSpoonity.html";
 
         string subject = existsInSpoonity
             ? "🎉 ¡Bienvenido a CRHoy PRO + Spooners! Ya podés disfrutar tus beneficios"
             : "🚀 Activá tus beneficios CRHoy PRO en Spooners";
 
-        string htmlPath = Path.Combine(_env.ContentRootPath, templateFile);
+        string htmlPath = Path.Combine(_env.WebRootPath, "Templates", templateFile);
+
         if (!System.IO.File.Exists(htmlPath))
-            return StatusCode(500, new { message = "Template no encontrado" });
+        {
+            _logger.LogError("📄 Template no encontrado en: {Path}", htmlPath);
+            return StatusCode(500, new { message = $"Template no encontrado en: {htmlPath}" });
+        }
 
         string htmlBody = await System.IO.File.ReadAllTextAsync(htmlPath);
         htmlBody = htmlBody.Replace("[Nombre]", name);
